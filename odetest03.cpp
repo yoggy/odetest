@@ -18,10 +18,11 @@ static void nearCallback(void *data, dGeomID o1, dGeomID o2)
 	int n =  dCollide(o1, o2, N, &contact[0].geom, sizeof(dContact));
 
 	for (int i = 0; i < n; i++) {
-		contact[i].surface.mode       = dContactBounce;
+		contact[i].surface.mode       = dContactBounce | dContactSoftCFM;
 		contact[i].surface.mu         = 0.0;
 		contact[i].surface.bounce     = 0.7;
 		contact[i].surface.bounce_vel = 0.01;
+		contact[i].surface.soft_cfm   = 0.01;
 		dJointID c = dJointCreateContact(world, contactgroup, &contact[i]);
 		dJointAttach(c, dGeomGetBody(contact[i].geom.g1), dGeomGetBody(contact[i].geom.g2));
 	}
@@ -88,9 +89,9 @@ int main (int argc, char **argv)
 	dJointSetHingeAnchor(hinges[2], 10.0, 0.0, 10.0);
 	dJointSetHingeAxis(hinges[2], 0, 1, 0);
 
-	// simulation loop (1000 step)
+	// simulation loop (2000 step)
 	dReal stepsize = 0.01; // 0.01ms
-	for (int count = 0; count < 1000; ++count) {
+	for (int count = 0; count < 2000; ++count) {
 		dSpaceCollide(space, 0, &nearCallback);
 
 		dWorldQuickStep(world, 0.01);
