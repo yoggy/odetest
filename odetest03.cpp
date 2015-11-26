@@ -1,5 +1,5 @@
 //
-// odetest02.cpp - simple free fall & bound test
+// odetest03.cpp - simple joint test
 //
 #include <ode/ode.h>
 #include <ncurses.h>
@@ -7,6 +7,8 @@
 
 dWorldID world;
 dJointGroupID contactgroup;
+
+#define BALL_NUM	3
 
 static void nearCallback(void *data, dGeomID o1, dGeomID o2)
 {
@@ -16,7 +18,7 @@ static void nearCallback(void *data, dGeomID o1, dGeomID o2)
 	int n =  dCollide(o1, o2, N, &contact[0].geom, sizeof(dContact));
 
 	for (int i = 0; i < n; i++) {
-		contact[i].surface.mode = dContactBounce;
+		contact[i].surface.mode       = dContactBounce;
 		contact[i].surface.mu         = 0.0;
 		contact[i].surface.bounce     = 0.7;
 		contact[i].surface.bounce_vel = 0.01;
@@ -25,24 +27,27 @@ static void nearCallback(void *data, dGeomID o1, dGeomID o2)
 	}
 }
 
+typedef struct Ball_ {
+	dBodyID body;
+	dGeomID geom;
+} Ball;
+
 int main (int argc, char **argv)
 {
 	initscr();
 
-	dInitODE();
+	dInitODE2(0);
 
 	// setup world
 	world = dWorldCreate();
 	dWorldSetGravity(world, 0, 0, -9.8);
+	dWorldSetDamping(world, 1e-4, 1e-5);
 
 	dSpaceID space = dHashSpaceCreate(0);
-	contactgroup = dJointGroupCreate(0);
+	contactgroup = dJointGroupCreate(10000);
 
 	// grand plane (for collision)
 	dGeomID ground = dCreatePlane(space, 0, 0, 1, 0);
-
-	// body
-	dBodyID ball = dBodyCreate(world);
 
 	// mass
 	dMass m;
@@ -51,40 +56,72 @@ int main (int argc, char **argv)
 	const dReal radius = 0.2;  // 20cm
 	const dReal mass   = 1.0;  // 1kg
 
-	dMassSetSphereTotal(&m, mass, radius);
-	dBodySetMass(ball, &m);
-	dBodySetPosition(ball, 0.0, 0.0, 10); // x=0m, y=0m, z=10m
+	// balls
+	Ball balls[BALL_NUM];
 
-	dGeomID geom = dCreateSphere(space, radius);
-	dGeomSetBody(geom, ball);
+	for (int i = 0; i < BALL_NUM; ++i) {
+		balls[i].body = dBodyCreate(world);
+		dMassSetSphereTotal(&m, mass, radius);
+		dBodySetMass(balls[i].body, &m);
+		dBodySetPosition(balls[i].body, 5.0 * i, 0.0, 10); // x=0m, y=0m, z=10m
+	
+		balls[i].geom = dCreateSphere(space, radius);
+		dGeomSetBody(balls[i].geom, balls[i].body);
+	}
+
+	// create joint
+	dJointID hinges[BALL_NUM];
+	for (int i = 0; i < BALL_NUM; ++i) {
+		hinges[i] = dJointCreateHinge(world, 0);
+	}
+
+	// attach world->balls[0]
+	dJointAttach(hinges[0], 0, balls[0].body);
+	dJointSetHingeAnchor(hinges[0], 0.0, 0.0, 10.0);
+	dJointSetHingeAxis(hinges[0], 0, 1, 0);
+
+	dJointAttach(hinges[1], balls[0].body, balls[1].body);
+	dJointSetHingeAnchor(hinges[1], 5.0, 0.0, 10.0);
+	dJointSetHingeAxis(hinges[1], 0, 1, 0);
+
+	dJointAttach(hinges[2], balls[1].body, balls[2].body);
+	dJointSetHingeAnchor(hinges[2], 10.0, 0.0, 10.0);
+	dJointSetHingeAxis(hinges[2], 0, 1, 0);
 
 	// simulation loop (1000 step)
 	dReal stepsize = 0.01; // 0.01ms
-	for (int i = 0; i < 1000; ++i) {
+	for (int count = 0; count < 1000; ++count) {
 		dSpaceCollide(space, 0, &nearCallback);
 
-		dWorldStep(world, 0.01);
+		dWorldQuickStep(world, 0.01);
 
 		dJointGroupEmpty(contactgroup);
 
 		// draw
 		erase();
 
-		const dReal *pos = dBodyGetPosition(ball);
-		const dReal *R   = dBodyGetRotation(ball);
-		mvprintw((int)(12-pos[2]), 5, "*");  // ball
+		for (int i = 0; i < BALL_NUM; ++i) {
+			const dReal *pos = dBodyGetPosition(balls[i].body);
+			const dReal *R   = dBodyGetRotation(balls[i].body);
+			mvprintw((int)(20-pos[2]), (10 + pos[0]), "*");  // ball
+		
+			move(1 + i, 4);
+			printw("i=%d, pos=(%f, %f, %f)", i, pos[0], pos[1], pos[2]);
+		}
 
-		mvprintw(12, 0, "============================");  // ground
+		mvprintw(20, 0, "====================================");  // ground
 
 		// draw 
 		move(0, 0);
-		printw("t=%f, pos=(%f, %f, %f) \n", stepsize * i, pos[0], pos[1], pos[2]);
+		printw("t=%f", stepsize * count);
 		refresh();
 
 		usleep(10 * 1000);
 	}
 
 	// cleanup
+	dJointGroupDestroy(contactgroup);
+	dSpaceDestroy(space);
 	dWorldDestroy(world);
 	dCloseODE();
 
