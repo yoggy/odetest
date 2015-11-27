@@ -6,11 +6,15 @@ ODE(Open Dynamics Engine)
 ![img01.gif](img01.gif)
 
     
-Requirement
+How to
 ----
 
     $ sudo apt-get install libode-dev cmake
-    
+	$ git clone https://github.com/yoggy/odetest.git
+    $ cd odetes
+    $ cmake .
+    $ make
+    $ ./odetest02
 
 Copyright and license
 ----
